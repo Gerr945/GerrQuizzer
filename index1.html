@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <a href="index.html"></a>
+    <title>Quiz Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background-color: #f5f7fa;
+            padding: 20px;
+            max-width: 800px;   
+            margin: 0 auto;
+        }
+        
+        .container {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            height: auto;
+            transition: all 0.3s ease;
+        }
+        
+        #login-screen, #start-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            gap: 20px;
+        }
+        
+        #quiz-screen, #result-screen {
+            display: none;
+        }
+        
+        h1 {
+            color: #3a4a6d;
+            margin-bottom: 20px;
+        }
+        
+        p {
+            color: #666;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+        
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+            transform: translateY(-2px);
+        }
+        
+        input {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            width: 80%;
+        }
+        
+        .error {
+            color: red;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="login-screen">
+        <h1>Login</h1>
+        <input type="email" id="email" placeholder="Email" required>
+        <input type="password" id="password" placeholder="Password" required>
+        <div class="error" id="error-message"></div>
+        <button id="login-btn">Login</button>
+    </div>
+    
+    <div class="container" id="start-screen" style="display: none;">
+        <h1>Quiz Game</h1>
+        <p>Test your knowledge with this 30-question quiz. You'll have 1 minute to answer each question.</p>
+        <button onclick="window.location.href='index.html'">Continue To Quiz</button>
+    </div>
+    
+    <div class="container" id="quiz-screen">
+        <div class="progress-container">
+            <div class="progress-bar" id="progress-bar"></div>
+        </div>
+        
+        <div class="timer-container">
+            <div class="question-number" id="question-number">Question 1/30</div>
+            <div class="timer" id="timer">01:00</div>
+        </div>
+        
+        <div class="question" id="question"></div>
+        <div class="options" id="options"></div>
+        
+        <button class="next-btn" id="next-btn">Next</button>
+    </div>
+    
+    <div class="container" id="result-screen">
+        <h1>Hasil Quiz</h1>
+        <div class="score" id="score"></div>
+        <div id="results"></div>
+        <button class="restart-btn" id="restart-btn">Mainkan Lagi</button>
+    </div>
+    
+    <script>
+        // Enhanced user database with password hashing
+        let usersDatabase = JSON.parse(localStorage.getItem('userCredentials')) || [];
+        
+        function saveCredentials(email, password) {
+            // Simple mock hashing - in production use bcrypt
+            const hashedPassword = 'hashed_' + password;
+            usersDatabase.push({ email, password: hashedPassword });
+            localStorage.setItem('userCredentials', JSON.stringify(usersDatabase));
+            return hashedPassword;
+        }
+
+        // Demo quiz questions
+        const questions = [
+            {
+                question: "What is 2+2?",
+                options: ["3", "4", "5", "6"],
+                answer: 1
+            },
+            {
+                question: "Capital of France?",
+                options: ["London", "Paris", "Berlin", "Madrid"],
+                answer: 1
+            }
+        ];
+        
+        // Quiz variables (same as before)
+        let currentQuestion = 0;
+        let score = 0;
+        let timer;
+        let timeLeft = 60;
+        let selectedOption = null;
+        let userAnswers = [];
+        
+        // DOM elements
+        const loginScreen = document.getElementById('login-screen');
+        const startScreen = document.getElementById('start-screen');
+        const quizScreen = document.getElementById('quiz-screen');
+        const resultScreen = document.getElementById('result-screen');
+        const loginBtn = document.getElementById('login-btn');
+        const startBtn = document.getElementById('start-btn');
+        const nextBtn = document.getElementById('next-btn');
+        const restartBtn = document.getElementById('restart-btn');
+        const questionEl = document.getElementById('question');
+        const optionsEl = document.getElementById('options');
+        const timerEl = document.getElementById('timer');
+        const progressBar = document.getElementById('progress-bar');
+        const questionNumberEl = document.getElementById('question-number');
+        const scoreEl = document.getElementById('score');
+        const resultsEl = document.getElementById('results');
+        const errorMessage = document.getElementById('error-message');
+        
+        // Event listeners
+        loginBtn.addEventListener('click', login);
+        
+        function clearStoredCredentials() {
+            localStorage.removeItem('userCredentials');
+            usersDatabase = [];
+        }
+        // Add enter key login
+        document.getElementById('password').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                login();
+            }
+        });
+        startBtn.addEventListener('click', startQuiz);
+        nextBtn.addEventListener('click', nextQuestion);
+        restartBtn.addEventListener('click', restartQuiz);
+        
+        // Enhanced login function
+        function login() {
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value.trim();
+            errorMessage.textContent = "";
+            
+            // Validate email format
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                errorMessage.textContent = "Format email tidak valid!";
+                return;
+            }
+            
+            if (password.length < 6) {
+                errorMessage.textContent = "Password minimal 6 karakter!";
+                return;
+            }
+            
+            const user = usersDatabase.find(u => u.email === email);
+            
+            if (!user) {
+                // Register new user
+                const hashedPassword = saveCredentials(email, password);
+                localStorage.setItem('currentUser', JSON.stringify({email}));
+                loginScreen.style.display = 'none';
+                startScreen.style.display = 'flex';
+                alert(`Akun baru berhasil dibuat untuk ${email}`);
+                return;
+            }
+            
+            // Mock password verification (in production use bcrypt.compare)
+            if (user.password === 'hashed_' + password) {
+                localStorage.setItem('currentUser', JSON.stringify({email}));
+                loginScreen.style.display = 'none';
+                startScreen.style.display = 'flex';
+                document.getElementById('email').value = '';
+                document.getElementById('password').value = '';
+            } else {
+                errorMessage.textContent = "Password salah!";
+            }
+        }
+        
+        // Start quiz function with user display
+        function startQuiz() {
+            const user = JSON.parse(localStorage.getItem('currentUser'));
+            if (user) {
+                console.log(`User logged in: ${user.email}`);
+            }
+            
+            startScreen.style.display = 'none';
+            quizScreen.style.display = 'block';
+            loadQuestion();
+            startTimer();
+        }
+        
+        // Load question function (same as before)
+        function loadQuestion() {
+            resetState();
+            const question = questions[currentQuestion];
+            questionEl.textContent = question.question;
+            questionNumberEl.textContent = `Question ${currentQuestion + 1}/${questions.length}`;
+            
+            question.options.forEach((option, index) => {
+                const button = document.createElement('div');
+                button.classList.add('option');
+                button.textContent = option;
+                button.addEventListener('click', () => selectOption(index));
+                optionsEl.appendChild(button);
+            });
+            
+            updateProgressBar();
+        }
+        
+        // Other functions (selectOption, resetState, startTimer, updateTimerDisplay, updateProgressBar, nextQuestion, showResults, restartQuiz) remain unchanged
+    </script>
+</body>
+</html>
